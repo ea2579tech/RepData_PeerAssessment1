@@ -7,19 +7,138 @@ output:
 
 
 ## Loading and preprocessing the data
-
-
+### (1) - Load data
+```{r}
+activity <- read.csv(unzip("activity.zip"), head=TRUE,sep=",")
+```
+### (2) - Check the data frame and transform date
+```{r}
+str(activity)
+activity$date <- as.Date(activity$date)
+```
 
 ## What is mean total number of steps taken per day?
+### (1) - Histogram
+```{r figure1}
+agdata <- aggregate(activity$steps, by=list(date=activity$date), FUN=sum)
+hist(agdata$x, main="Histogram of Total Number of steps per day",
+    xlab="Total Number of Steps per day",
+    ylab="Frequency",
+    border="blue", 
+    col="green",
+    xlim=c(5000,25000),
+    las=1, 
+    breaks=10
+)
+```
 
-
+### (2) - Mean and Median number of steps per day
+```{r}
+library(plyr)
+avgdata <- ddply(activity, .(date), summarise,
+               "Mean" = mean(steps),
+               "Median" = median(steps)
+)
+print(avgdata)
+```
 
 ## What is the average daily activity pattern?
+### (1) - Time series plot
+```{r figure2}
+actintv <- aggregate(activity$steps, by=list(interval=activity$interval), FUN=mean, na.rm=TRUE)
+colnames(actintv) <- c('interval', 'avgsteps')
+with(actintv, plot(interval, avgsteps, type="l", main="Average Steps per 5-minute interval"))
+```
 
-
+### (2) - 5-minute interval with max number of steps
+```{r}
+actintv[actintv$avgsteps == max(actintv$avgsteps),]$interval
+```
 
 ## Imputing missing values
 
+### (1) - Total number of rows containing missing values
+```{r}
+nrow(activity[is.na(activity),])
+```
+### checking which columns actually contain missing values (nrow > 0)
+```{r}
+nrow(activity[is.na(activity$steps),])
+nrow(activity[is.na(activity$date),])
+nrow(activity[is.na(activity$interval),])
+```
+### (2) - Strategy for Filling in Missing values
+#### We'll use the average steps per interval accross all days
+####  Average values per interval come from previously created data frame (actintv)
+### (3) - data frame with filled in mising values
+```{r}
+activit2 <- activity
+for (i in 1:nrow(activit2)) {
+    if (is.na(activit2[i,]$steps)){
+        savintv = activit2[i,]$interval
+        activit2[i,]$steps = actintv[actintv$interval == savintv,]$avgsteps
+    }   
+}
+```
+### (4) Aggregate the filled in data frame and make a Histogram
+```{r figure3}
+agdat2 <- aggregate(activit2$steps, by=list(date=activit2$date), FUN=sum)
+
+hist(agdat2$x, 
+     main="Histogram of Total Number of steps per day \n with Filled in Missing Values",
+     xlab="Total Number of Steps per day",
+     ylab="Frequency",
+     border="blue", 
+     col="green",
+     xlim=c(5000,25000),
+     las=1, 
+     breaks=10
+)
+```
+
+#### - Mean and Median number of steps per day
+```{r}
+avgact2 <- ddply(activit2, .(date), summarise,
+               "Mean" = mean(steps),
+               "Median" = median(steps)
+)
+print(avgact2)
+```
+#### Now comparing summarized data of NA filled IN and Not
+```{r}
+all.equal(avgdata,avgact2)
+colMeans(avgdata[, c(2,3)], na.rm=TRUE)
+colMeans(avgact2[, c(2,3)])
+```
+#### Per the result above the means did not change but the median did  
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+### (1) - New `factor` variable with 2 levels "weekday"" and "weekend"  
+#### create a vector and convert to `factor` specifying `levels/labels`
+#### First, create a vector of weekdays
+```{r}
+activit2$date <- as.Date(activit2$date)
+weekdays1 <- c('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday')
+activit2$wDay <- factor((weekdays(activit2$date) %in% weekdays1), 
+                   levels=c(FALSE, TRUE), labels=c('weekend', 'weekday') 
+                 )
+```
+### (2) Panel plot
+#### summarize by interval and weekday factor
+```{r}
+avgdat2 <- ddply(activit2, .(interval, wDay), summarise,
+                 "AvgSteps" = mean(steps)
+            )
+
+```
+#### Time series plot
+```{r figure4}
+library(lattice)
+xyplot(AvgSteps ~ interval | wDay, data=avgdat2,
+       main = "Average number of steps per 5-minute Interval",
+       xlab = "5-minute Interval", 
+       ylab = "Average number of steps",
+       type = c("l"), layout = c(2, 1)
+)
+```
